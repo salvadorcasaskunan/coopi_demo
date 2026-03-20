@@ -10,18 +10,20 @@ const CLIENT_ID = "d272357e-2105-0fe5-6012-69398c79751b";
 const CLIENT_SECRET = "admin-integrations";
 const PORT = process.env.PORT || 3000;
 
-// OBTENER TOKEN OAUTH2 con Basic Auth
+// OBTENER TOKEN OAUTH2
+// Segun wiki: POST /Api/access_token con JSON body
 async function getAccessToken() {
-  const basicAuth = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
   const response = await axios.post(
-    `${CRM_URL}/api/v8/oauth2/token`,
-    new URLSearchParams({
+    `${CRM_URL}/Api/access_token`,
+    {
       grant_type: "client_credentials",
-    }),
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+    },
     {
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${basicAuth}`,
+        "Content-Type": "application/json",
+        "Accept": "application/vnd.api+json",
       },
     }
   );
@@ -33,9 +35,13 @@ async function getCooperativaByPhone(token, phone) {
   const normalizedPhone = phone.replace(/^\+/, "");
 
   const response = await axios.get(
-    `${CRM_URL}/api/v8/modules/KNN_Cooperativas`,
+    `${CRM_URL}/Api/V8/module/KNN_Cooperativas`,
     {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/vnd.api+json",
+        "Accept": "application/vnd.api+json",
+      },
       params: {
         "filter[operator]": "and",
         "filter[KNN_Cooperativas.whatsapp][eq]": normalizedPhone,
@@ -52,15 +58,19 @@ async function getCooperativaByPhone(token, phone) {
 // BUSCAR PREGUNTA FRECUENTE POR COOPERATIVA Y POSICION
 async function getFAQ(token, cooperativaId, position = 1) {
   const response = await axios.get(
-    `${CRM_URL}/api/v8/modules/KNN_Preguntas_Frecuentes`,
+    `${CRM_URL}/Api/V8/module/KNN_Preguntas_Frecuentes`,
     {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/vnd.api+json",
+        "Accept": "application/vnd.api+json",
+      },
       params: {
         "filter[operator]": "and",
-        "filter[KNN_Preguntas_Frecuentes.cooperativa_id][eq]": cooperativaId,
-        "filter[KNN_Preguntas_Frecuentes.posicion_en_bot][eq]": position,
-        "filter[KNN_Preguntas_Frecuentes.activo][eq]": 1,
-        "fields[KNN_Preguntas_Frecuentes]": "id,name,description,posicion_en_bot,activo",
+        "filter[KNN_Preguntas_Frecuentes.cooperativa_id_c][eq]": cooperativaId,
+        "filter[KNN_Preguntas_Frecuentes.posicion_en_bot_c][eq]": position,
+        "filter[KNN_Preguntas_Frecuentes.activo_c][eq]": 1,
+        "fields[KNN_Preguntas_Frecuentes]": "id,name,description,posicion_en_bot_c,activo_c",
       },
     }
   );
@@ -95,6 +105,7 @@ app.get("/api/faq", async (req, res) => {
       return res.status(404).json({
         success: false,
         error: `No se encontro FAQ en posicion ${position} para la cooperativa ${cooperativa.attributes?.name}.`,
+        cooperativa_id: cooperativa.id,
       });
     }
 
