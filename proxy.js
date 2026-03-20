@@ -44,8 +44,8 @@ async function getCooperativaByPhone(token, phone) {
       },
       params: {
         "filter[operator]": "and",
-        "filter[KNN_Cooperativas.whatsapp_c][eq]": normalizedPhone,
-        "fields[KNN_Cooperativas]": "id,name,whatsapp_c",
+        "filter[KNN_Cooperativas.phone_mobile][eq]": normalizedPhone,
+        "fields[KNN_Cooperativas]": "id,name,phone_mobile",
       },
     }
   );
