@@ -27,6 +27,7 @@ async function getAccessToken() {
   return response.data.access_token;
 }
 
+// Busca la cooperativa comparando phone_mobile en memoria
 async function getCooperativaByPhone(token, phone) {
   const normalizedPhone = phone.replace(/^\+/, "");
   const response = await axios.get(
@@ -38,38 +39,46 @@ async function getCooperativaByPhone(token, phone) {
         "Accept": "application/vnd.api+json",
       },
       params: {
-        "filter[operator]": "and",
-        "filter[KNN_Cooperativas.phone_mobile][eq]": normalizedPhone,
         "fields[KNN_Cooperativas]": "id,name,phone_mobile",
+        "page[size]": 50,
       },
     }
   );
+
   const data = response.data?.data;
   if (!data || data.length === 0) return null;
-  return data[0];
+
+  // Buscar la cooperativa que tenga ese phone_mobile
+  return data.find(c => {
+    const mobile = (c.attributes?.phone_mobile || "").replace(/^\+/, "");
+    return mobile === normalizedPhone;
+  }) || null;
 }
 
-async function getFAQ(token, cooperativaId, position = 1) {
+// Busca FAQs via relationship de la cooperativa
+async function getFAQByRelationship(token, cooperativaId, position = 1) {
   const response = await axios.get(
-    `${CRM_URL}/Api/V8/module/KNN_Preguntas_Frecuentes`,
+    `${CRM_URL}/Api/V8/module/KNN_Cooperativas/${cooperativaId}/relationships/knn_cooperativas_knn_preguntas_frecuentes_1`,
     {
       headers: {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/vnd.api+json",
         "Accept": "application/vnd.api+json",
       },
-      params: {
-        "filter[operator]": "and",
-        "filter[KNN_Preguntas_Frecuentes.cooperativa_id_c][eq]": cooperativaId,
-        "filter[KNN_Preguntas_Frecuentes.posicion_en_bot_c][eq]": position,
-        "filter[KNN_Preguntas_Frecuentes.activo_c][eq]": 1,
-        "fields[KNN_Preguntas_Frecuentes]": "id,name,description,posicion_en_bot_c,activo_c",
-      },
     }
   );
+
   const data = response.data?.data;
   if (!data || data.length === 0) return null;
-  return data[0];
+
+  // Si hay un solo resultado o no hay posicion, devolver el primero
+  if (data.length === 1) return data[0];
+
+  // Buscar por posicion_en_bot
+  return data.find(f => {
+    const pos = parseInt(f.attributes?.posicion_en_bot_c || f.attributes?.posicion_en_bot || 0);
+    return pos === position;
+  }) || data[0];
 }
 
 // ENDPOINT PRINCIPAL
@@ -80,14 +89,17 @@ app.get("/api/faq", async (req, res) => {
   }
   try {
     const token = await getAccessToken();
+
     const cooperativa = await getCooperativaByPhone(token, phone);
     if (!cooperativa) {
       return res.status(404).json({ success: false, error: `No se encontro cooperativa con numero ${phone}.` });
     }
-    const faq = await getFAQ(token, cooperativa.id, parseInt(position));
+
+    const faq = await getFAQByRelationship(token, cooperativa.id, parseInt(position));
     if (!faq) {
       return res.status(404).json({ success: false, error: `No se encontro FAQ en posicion ${position}.`, cooperativa_id: cooperativa.id });
     }
+
     return res.json({
       success: true,
       cooperativa: cooperativa.attributes?.name,
