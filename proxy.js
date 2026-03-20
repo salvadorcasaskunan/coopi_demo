@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3000;
 // ─── OBTENER TOKEN OAUTH2 ─────────────────────────────────────────────────────
 async function getAccessToken() {
   const response = await axios.post(
-    `${CRM_URL}/api/oauth2/token`,
+    `${CRM_URL}/api/v8/oauth2/token`,
     new URLSearchParams({
       grant_type: "client_credentials",
       client_id: CLIENT_ID,
