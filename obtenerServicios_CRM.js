@@ -11,7 +11,6 @@ const main = async () => {
   bmconsole.log(`[SERVICIOS] Respuesta: ${JSON.stringify(data)}`);
 
   if (data.success && data.servicios?.length > 0) {
-    // Guardar el array completo para usarlo en seleccion posterior
     user.set("servicios_lista", JSON.stringify(data.servicios));
     user.set("servicios_total", data.total);
   } else {
@@ -19,6 +18,10 @@ const main = async () => {
     user.set("servicios_total", 0);
     bmconsole.log("[SERVICIOS] No se encontraron servicios");
   }
+
+  // Setear configuracion para armarLista_CRM
+  user.set("lista_input_key", "servicios_lista");
+  user.set("lista_output_key", "lista_mostrar");
 };
 
 main()
