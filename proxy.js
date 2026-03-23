@@ -9,6 +9,7 @@ const CLIENT_ID = "d272357e-2105-0fe5-6012-69398c79751b";
 const CLIENT_SECRET = "admin-integrations";
 const PORT = process.env.PORT || 3000;
 
+// Obtenenemos token
 async function getAccessToken() {
   const response = await axios.post(
     `${CRM_URL}/Api/access_token`,
@@ -27,9 +28,10 @@ async function getAccessToken() {
   return response.data.access_token;
 }
 
-// Busca la cooperativa comparando phone_mobile en memoria
+//Buscamos cooperativa por teléfono
 async function getCooperativaByPhone(token, phone) {
   const normalizedPhone = phone.replace(/^\+/, "");
+
   const response = await axios.get(
     `${CRM_URL}/Api/V8/module/KNN_Cooperativas`,
     {
@@ -48,15 +50,14 @@ async function getCooperativaByPhone(token, phone) {
   const data = response.data?.data;
   if (!data || data.length === 0) return null;
 
-  // Buscar la cooperativa que tenga ese phone_mobile
   return data.find(c => {
     const mobile = (c.attributes?.phone_mobile || "").replace(/^\+/, "");
     return mobile === normalizedPhone;
   }) || null;
 }
 
-// Busca FAQs via relationship de la cooperativa
-async function getFAQByRelationship(token, cooperativaId, position = 1) {
+// Traemos TODAS las FAQs
+async function getAllFAQs(token, cooperativaId) {
   const response = await axios.get(
     `${CRM_URL}/Api/V8/module/KNN_Cooperativas/${cooperativaId}/relationships/knn_cooperativas_knn_preguntas_frecuentes_1`,
     {
@@ -65,80 +66,95 @@ async function getFAQByRelationship(token, cooperativaId, position = 1) {
         "Content-Type": "application/vnd.api+json",
         "Accept": "application/vnd.api+json",
       },
+      params: {
+        "page[size]": 100,
+      },
     }
   );
 
-  const data = response.data?.data;
-  if (!data || data.length === 0) return null;
-
-  // Si hay un solo resultado o no hay posicion, devolver el primero
-  if (data.length === 1) return data[0];
-
-  // Buscar por posicion_en_bot
-  return data.find(f => {
-    const pos = parseInt(f.attributes?.posicion_en_bot_c || f.attributes?.posicion_en_bot || 0);
-    return pos === position;
-  }) || data[0];
+  return response.data?.data || [];
 }
 
 // ENDPOINT PRINCIPAL
 app.get("/api/faq", async (req, res) => {
-  const { phone, position = 1 } = req.query;
+  const { phone, position } = req.query;
+
   if (!phone) {
-    return res.status(400).json({ success: false, error: "El parametro 'phone' es requerido." });
+    return res.status(400).json({
+      success: false,
+      error: "El parametro 'phone' es requerido.",
+    });
   }
+
+  if (!position) {
+    return res.status(400).json({
+      success: false,
+      error: "El parametro 'position' es requerido.",
+    });
+  }
+
   try {
     const token = await getAccessToken();
 
     const cooperativa = await getCooperativaByPhone(token, phone);
     if (!cooperativa) {
-      return res.status(404).json({ success: false, error: `No se encontro cooperativa con numero ${phone}.` });
+      return res.status(404).json({
+        success: false,
+        error: `No se encontro cooperativa con numero ${phone}.`,
+      });
     }
 
-    const faq = await getFAQByRelationship(token, cooperativa.id, parseInt(position));
+    const faqs = await getAllFAQs(token, cooperativa.id);
+
+    if (!faqs.length) {
+      return res.status(404).json({
+        success: false,
+        error: "No hay FAQs cargadas.",
+      });
+    }
+
+    // Buscamos por posicion_en_bot
+    const faq = faqs.find(f => {
+      const pos = parseInt(f.attributes?.posicion_en_bot || 0);
+      return pos === parseInt(position);
+    });
+
     if (!faq) {
-      return res.status(404).json({ success: false, error: `No se encontro FAQ en posicion ${position}.`, cooperativa_id: cooperativa.id });
+      return res.status(404).json({
+        success: false,
+        error: `No se encontro FAQ en posicion ${position}.`,
+      });
     }
 
+    // Armamos respuesta final
     return res.json({
       success: true,
       cooperativa: cooperativa.attributes?.name,
+      posicion: parseInt(faq.attributes?.posicion_en_bot || 0),
       pregunta: faq.attributes?.name,
       descripcion: faq.attributes?.description,
     });
+
   } catch (error) {
     console.error("Error:", error?.response?.data || error.message);
-    return res.status(500).json({ success: false, error: "Error interno.", detalle: error?.response?.data || error.message });
-  }
-});
 
-// DEBUG: Ver registros de KNN_Cooperativas sin filtro
-app.get("/api/debug-cooperativas", async (req, res) => {
-  try {
-    const token = await getAccessToken();
-    const response = await axios.get(
-      `${CRM_URL}/Api/V8/module/KNN_Cooperativas`,
-      {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/vnd.api+json",
-          "Accept": "application/vnd.api+json",
-        },
-        params: { "page[size]": 2 },
-      }
-    );
-    return res.json(response.data);
-  } catch (error) {
-    return res.status(500).json({ error: error?.response?.data || error.message });
+    return res.status(500).json({
+      success: false,
+      error: "Error interno.",
+      detalle: error?.response?.data || error.message,
+    });
   }
 });
 
 // HEALTH CHECK
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
+// Envio de ping
 const RENDER_URL = process.env.RENDER_EXTERNAL_URL || null;
+
 function startSelfPing() {
   if (!RENDER_URL) return;
+
   setInterval(async () => {
     try {
       await axios.get(`${RENDER_URL}/health`);
@@ -149,6 +165,7 @@ function startSelfPing() {
   }, 10 * 60 * 1000);
 }
 
+// START
 app.listen(PORT, () => {
   console.log(`Proxy corriendo en puerto ${PORT}`);
   startSelfPing();
