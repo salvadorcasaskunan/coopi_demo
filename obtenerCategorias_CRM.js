@@ -11,7 +11,6 @@ const main = async () => {
   bmconsole.log(`[CATEGORIAS] Respuesta: ${JSON.stringify(data)}`);
 
   if (data.success && data.categorias?.length > 0) {
-    // Guardar el array completo para usarlo en seleccion posterior
     user.set("categorias_lista", JSON.stringify(data.categorias));
     user.set("categorias_total", data.total);
   } else {
@@ -19,6 +18,10 @@ const main = async () => {
     user.set("categorias_total", 0);
     bmconsole.log("[CATEGORIAS] No se encontraron categorias");
   }
+
+  // Setear configuracion para armarLista_CRM
+  user.set("lista_input_key", "categorias_lista");
+  user.set("lista_output_key", "lista_mostrar");
 };
 
 main()
